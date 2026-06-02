@@ -17,7 +17,7 @@ every sample); typical OPL game music is far sparser and leaves more headroom.
 ## Hardware
 
 Work was done on a [Waveshare
-RP2350-Touch-LCD-3.5](https://www.waveshare.com/wiki/RP2350-Touch-LCD-3.5), with
+RP2350-Touch-LCD-3.5](https://docs.waveshare.com/RP2350-Touch-LCD-3.5), with
 an ES8311 codec. May work without modification on other RP2350 devboards with an
 ES8311 but YMMV.
 
