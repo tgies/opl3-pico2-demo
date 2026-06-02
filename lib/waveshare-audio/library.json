@@ -1,0 +1,8 @@
+{
+  "name": "waveshare-audio",
+  "version": "0.0.0",
+  "description": "ES8311 codec + PIO I2S/MCLK driver, ported from Waveshare's RP2350-Touch-LCD-3.5 reference (https://github.com/waveshareteam/RP2350-Touch-LCD-3.5). MIT-style license per upstream file headers.",
+  "build": {
+    "flags": ["-O3"]
+  }
+}

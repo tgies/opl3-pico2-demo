@@ -1,0 +1,8 @@
+{
+  "name": "nuked-opl3-upstream",
+  "version": "0.0.0",
+  "description": "Upstream Nuked-OPL3 (nukeykt), for A/B comparison against the fast fork. Vendored source.",
+  "build": {
+    "flags": ["-O3"]
+  }
+}

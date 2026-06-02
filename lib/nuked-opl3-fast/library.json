@@ -1,0 +1,8 @@
+{
+  "name": "nuked-opl3-fast",
+  "version": "0.0.0",
+  "description": "Nuked-OPL3-fast (pico2 branch): optimized fork of Nuked-OPL3. Vendored source.",
+  "build": {
+    "flags": ["-O3"]
+  }
+}

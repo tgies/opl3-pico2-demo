@@ -1,0 +1,8 @@
+# PlatformIO build output
+.pio/
+
+# Editor / OS cruft
+*.swp
+*~
+.DS_Store
+.vscode/
