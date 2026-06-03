@@ -1,7 +1,8 @@
 # opl3-pico2-demo
 
-[Nuked-OPL3](https://github.com/tgies/Nuked-OPL3-fast) running in real time on a
-single core of an RP2350, playing VGM tunes out an I2S codec.
+[Nuked-OPL3-fast](https://github.com/tgies/Nuked-OPL3-fast) running in real time
+on a single core of an RP2350, playing VGM tunes out an I2S codec, at full
+fidelity.
 
 > [!NOTE]
 > This is an experimental proof of concept for research & development purposes.
@@ -14,7 +15,39 @@ at 366MHz, with output bit-for-bit identical to upstream Nuked-OPL3. Crystal
 Oscillator is a pathological worst case (all 36 operator slots active nearly
 every sample); typical OPL game music is far sparser and leaves more headroom. 
 
+## What! How?
+
+tl;dr: [Nuked-OPL3](https://github.com/nukeykt/Nuked-OPL3), by the brilliant
+Nuke.YKT, is a bit slower than it needs to be. I poked around with it a bit and
+created [Nuked-OPL3-fast](https://github.com/tgies/Nuked-OPL3-fast), which is
+bit-for-bit identical in output to the original Nuked-OPL3, but 1.4x to 2.2x
+faster. I then applied further RP2350-specific optimizations. Look at
+Nuked-OPL3-fast for more detail about the optimizations. The RP2350-specific
+optimizations are currently only in this repository and are rather uninteresting
+(mostly some force-inlining and things like that).
+
+## Why?
+
+I mean, if you're reading this, you probably already know, but Yamaha's OPL2 and
+OPL3 chips defined the sound of many home computers in the 1980s and 1990s, and
+"retrocomputing" enthusiasts (among others) are interested in hardware
+emulations of old sound devices e.g. as a basis for DIYing a reasonable
+facsimile of an old hard-to-find sound card. Also because it's neat.
+
+## Can it go even faster?
+
+Maybe! Currently around 50% of Nuked's CPU time is in the branch-heavy envelope
+generator. There might be a way to optimize some of the branching into
+branchless, arcane, evil expressions. I'm going to keep messing with it.
+
 ## Hardware
+
+It bears repeating that this is a proof of concept, so the demo harness is
+written to work with the devboard I had on hand, and I did not waste time making
+it super-easily retargetable to different boards, because this code is for
+developers to use as a reference, not for end users. I trust that the audience
+for this work can easily find the pin assignments etc. they need to change if
+they wish to run the demo on different hardware.
 
 Work was done on a [Waveshare
 RP2350-Touch-LCD-3.5](https://docs.waveshare.com/RP2350-Touch-LCD-3.5), with
@@ -23,6 +56,11 @@ ES8311 but YMMV.
 
 Pin assignment is in `lib/waveshare-audio/src/audio_pio.h` if you need to mess
 with it.
+
+> [!NOTE]
+> The demo code renders in full stereo, but mixes down to mono because I was
+> testing with a built-in mono speaker on my devboard. If you have stereo sound,
+> you can wire that up and drop the mixdown.
 
 ## Build, flash, monitor
 
@@ -76,7 +114,7 @@ Crystal Oscillator is bundled in `assets/`.
 ```
 src/main.cpp              core-1 audio renderer + core-0 housekeeping, VGM player, diagnostic
 src/tune_*.h              embedded VGM data (generated)
-lib/nuked-opl3-fast/      optimized OPL3 core
+lib/nuked-opl3-fast/      optimized OPL3 core (my Nuked-OPL3-Fast w/ RP2530 optimizations)
 lib/nuked-opl3-upstream/  stock Nuked-OPL3, for A/B comparison
 lib/waveshare-audio/      ES8311 + PIO I2S driver
 scripts/vgm_to_header.py  VGM/VGZ -> C header converter
