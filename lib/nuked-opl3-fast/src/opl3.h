@@ -61,6 +61,17 @@ extern "C" {
 #define OPL_ENABLE_STEREOEXT 0
 #endif
 
+#ifndef OPL_QUIRK_CHANNELSAMPLEDELAY
+#define OPL_QUIRK_CHANNELSAMPLEDELAY (!OPL_ENABLE_STEREOEXT)
+#endif
+
+/* OPL3_DUAL_CORE restructures OPL3_Generate4Ch so all 36 slots are processed
+ * before either mix pass (slots 0-17 and 18-35 can then run on separate
+ * cores) and the right-channel mix can run on the worker. */
+#ifndef OPL3_DUAL_CORE
+#define OPL3_DUAL_CORE 0
+#endif
+
 #define OPL_WRITEBUF_SIZE   1024
 #define OPL_WRITEBUF_DELAY  2
 
@@ -72,7 +83,6 @@ struct _opl3_slot {
     opl3_channel *channel;
     opl3_chip *chip;
     int16_t *mod;
-    uint8_t *trem;
     uint32_t pg_reset;
     uint32_t pg_phase;
     uint32_t pg_inc;
@@ -92,6 +102,9 @@ struct _opl3_slot {
     uint8_t reg_mult;
     uint8_t reg_wf;
     uint8_t slot_num;
+    /* 0xff when reg 0x20 bit 7 (tremolo enable) is set, else 0; the envelope
+     * reads (chip->tremolo & trem_mask) */
+    uint8_t trem_mask;
     uint8_t eg_ksl;
     uint8_t eg_ks;
     uint8_t reg_type;
@@ -108,6 +121,10 @@ struct _opl3_slot {
      *   bits 9:8  rate_lo (0..3)
      *   bit  16   nonzero (eg_rates[ii] != 0) */
     uint32_t eg_rate_word[4];
+    /* Phase increment per vibrato position, maintained by
+     * OPL3_PhaseUpdateInc (and rebuilt on vibshift changes); pg_inc_vib[pos]
+     * equals the upstream per-sample vibrato f_num adjustment for that pos. */
+    uint32_t pg_inc_vib[8];
 };
 
 struct _opl3_channel {
@@ -115,6 +132,16 @@ struct _opl3_channel {
     opl3_channel *pair;
     opl3_chip *chip;
     int16_t *out[4];
+#if OPL_QUIRK_CHANNELSAMPLEDELAY
+    /* Mix-pass pointer lists: identical to out[] except entries pointing at
+     * a delayed slot's out are redirected to its prout, which holds the
+     * previous sample's out once all 36 slots are processed. out_left delays
+     * slots 15-35 and out_right delays 33-35, reproducing the
+     * CHANNELSAMPLEDELAY snapshots without staging slot processing around
+     * the mixes in single-core or parking outputs in dual-core. */
+    int16_t *out_left[4];
+    int16_t *out_right[4];
+#endif
     uint8_t out_cnt;
 
 #if OPL_ENABLE_STEREOEXT
@@ -144,7 +171,10 @@ struct _opl3_chip {
     opl3_channel channel[18];
     opl3_slot slot[36];
     uint16_t timer;
-    uint64_t eg_timer;
+    /* 36-bit envelope timer (wraps at 0xfffffffff) stored as 32+4 bits so
+     * the per-sample increment and wrap test avoid 64-bit arithmetic. */
+    uint32_t eg_timer;
+    uint8_t eg_timer_hi;
     uint8_t eg_timerrem;
     uint8_t eg_state;
     uint8_t eg_add;
@@ -154,11 +184,19 @@ struct _opl3_chip {
     uint8_t rhy;
     uint8_t vibpos;
     uint8_t vibshift;
+    /* Envelope shift per (rate_hi << 2) | rate_lo with the chip-global
+     * eg_state / eg_add / eg_timer_lo terms built in. Rebuilt by
+     * OPL3_BuildEgShiftLut at the end of every sample */
+    uint32_t eg_shift_lut[16];
     uint8_t tremolo;
     uint8_t tremolopos;
     uint8_t tremoloshift;
     uint8_t tremolo_dirty;
     uint32_t noise;
+    /* Bit 0 of the noise LFSR state as seen by the hh (slot 13) and sd
+     * (slot 16) rhythm operators, precomputed per sample */
+    uint32_t noise_hh;
+    uint32_t noise_sd;
     int16_t zeromod;
     int32_t mixbuff[4];
     uint8_t rm_hh_bit2;
@@ -195,6 +233,25 @@ void OPL3_GenerateStream(opl3_chip *chip, int16_t *sndptr, uint32_t numsamples);
 void OPL3_Generate4Ch(opl3_chip *chip, int16_t *buf4);
 void OPL3_Generate4ChResampled(opl3_chip *chip, int16_t *buf4);
 void OPL3_Generate4ChStream(opl3_chip *chip, int16_t *sndptr1, int16_t *sndptr2, uint32_t numsamples);
+
+/* OPL3_MixRight computes the right-channel mix into mixbuff[1]/mixbuff[3];
+ * it runs inline in single-core builds. In OPL3_DUAL_CORE builds,
+ * OPL3_ProcessBank1 runs channels [OPL3_BANK_SPLIT/2, 18) and the app may
+ * override the four weak hooks to run it and the right mix on a second core.
+ * Per-sample hook sequence in OPL3_Generate4Ch:
+ *
+ *   Bank1Dispatch   worker may start ProcessBank1 (noise/writebuf settled)
+ *   Bank0Done       conductor slots done; worker may start MixRight after
+ *                   its own Bank1 slots
+ *   Bank1Wait       barrier: all 36 slot outs valid (conductor mixes left)
+ *   MixRightWait    barrier: MixRight done (register writes may now mutate
+ *                   channel state) */
+void OPL3_ProcessBank1(opl3_chip *chip);
+void OPL3_MixRight(opl3_chip *chip);
+void OPL3_Bank1Dispatch(opl3_chip *chip);
+void OPL3_Bank0Done(opl3_chip *chip);
+void OPL3_Bank1Wait(opl3_chip *chip);
+void OPL3_MixRightWait(opl3_chip *chip);
 
 #ifdef __cplusplus
 }
